@@ -9,6 +9,7 @@ import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Build
 import android.os.CombinedVibration
+import android.os.VibrationAttributes
 import android.os.VibrationEffect
 import android.os.VibratorManager
 import androidx.core.app.NotificationCompat
@@ -135,8 +136,15 @@ class AlarmReceiver : BroadcastReceiver() {
     private fun Context.startReminderVibration(durationMillis: Long) {
         val manager = getSystemService(VibratorManager::class.java)
         if (!manager.defaultVibrator.hasVibrator()) return
-        val effect = VibrationEffect.createOneShot(durationMillis, VibrationEffect.DEFAULT_AMPLITUDE)
-        manager.vibrate(CombinedVibration.createParallel(effect))
+        val effect = VibrationEffect.createWaveform(
+            longArrayOf(0L, 450L, 180L),
+            intArrayOf(0, VibrationEffect.DEFAULT_AMPLITUDE, 0),
+            1
+        )
+        val attributes = VibrationAttributes.Builder()
+            .setUsage(VibrationAttributes.USAGE_ALARM)
+            .build()
+        manager.vibrate(CombinedVibration.createParallel(effect), attributes)
     }
 
     private fun Context.stopReminderVibration() {
