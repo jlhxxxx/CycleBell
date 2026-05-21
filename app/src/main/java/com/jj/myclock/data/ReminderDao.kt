@@ -1,4 +1,4 @@
-package com.jj.myclock.data
+package com.jxcode.cyclebell.data
 
 import androidx.room.Dao
 import androidx.room.Delete
@@ -10,7 +10,7 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface ReminderDao {
-    @Query("SELECT * FROM reminders ORDER BY enabled DESC, nextTriggerAtMillis IS NULL, nextTriggerAtMillis ASC, updatedAtMillis DESC")
+    @Query("SELECT * FROM reminders ORDER BY startTimeEnabled DESC, startTimeHour ASC, startTimeMinute ASC, startTimeSecond ASC, title COLLATE NOCASE ASC")
     fun observeReminders(): Flow<List<ReminderEntity>>
 
     @Query("SELECT * FROM reminders WHERE id = :id LIMIT 1")
@@ -25,6 +25,36 @@ interface ReminderDao {
     @Delete
     suspend fun deleteReminder(reminder: ReminderEntity)
 
-    @Query("UPDATE reminders SET enabled = :enabled, updatedAtMillis = :updatedAtMillis WHERE id = :id")
-    suspend fun setEnabled(id: Long, enabled: Boolean, updatedAtMillis: Long)
+    @Query("UPDATE reminders SET enabled = 0, updatedAtMillis = :updatedAtMillis WHERE id = :id")
+    suspend fun disableReminder(id: Long, updatedAtMillis: Long)
+
+    @Query(
+        """
+        UPDATE reminders
+        SET enabled = :enabled,
+            completedCount = 0,
+            nextTriggerAtMillis = :nextTriggerAtMillis,
+            updatedAtMillis = :updatedAtMillis
+        WHERE id = :id
+        """
+    )
+    suspend fun restartReminder(id: Long, enabled: Boolean, nextTriggerAtMillis: Long?, updatedAtMillis: Long)
+
+    @Query(
+        """
+        UPDATE reminders
+        SET completedCount = :completedCount,
+            nextTriggerAtMillis = :nextTriggerAtMillis,
+            enabled = :enabled,
+            updatedAtMillis = :updatedAtMillis
+        WHERE id = :id
+        """
+    )
+    suspend fun updateAfterTrigger(
+        id: Long,
+        completedCount: Int,
+        nextTriggerAtMillis: Long?,
+        enabled: Boolean,
+        updatedAtMillis: Long
+    )
 }

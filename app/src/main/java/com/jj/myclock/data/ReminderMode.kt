@@ -1,4 +1,4 @@
-package com.jj.myclock.data
+package com.jxcode.cyclebell.data
 
 enum class ReminderMode {
     COUNT_LOOP,

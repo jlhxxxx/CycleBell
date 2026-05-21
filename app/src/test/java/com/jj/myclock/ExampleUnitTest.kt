@@ -1,4 +1,4 @@
-package com.jj.myclock
+package com.jxcode.cyclebell
 
 import org.junit.Test
 

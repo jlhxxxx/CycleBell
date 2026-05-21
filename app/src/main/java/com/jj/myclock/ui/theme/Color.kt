@@ -1,4 +1,4 @@
-package com.jj.myclock.ui.theme
+package com.jxcode.cyclebell.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
