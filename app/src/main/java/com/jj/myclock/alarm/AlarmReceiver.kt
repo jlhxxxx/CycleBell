@@ -8,8 +8,8 @@ import android.content.Intent
 import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Build
+import android.os.CombinedVibration
 import android.os.VibrationEffect
-import android.os.Vibrator
 import android.os.VibratorManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -104,14 +104,15 @@ class AlarmReceiver : BroadcastReceiver() {
     private suspend fun playReminderAlert(context: Context, reminder: ReminderEntity) {
         val ringtone = RingtoneManager.getRingtone(context, reminder.soundUri()) ?: return
         val durationMillis = reminder.ringDurationSeconds.coerceIn(1, 120) * 1_000L
-        val vibrator = if (reminder.vibrate) context.reminderVibrator() else null
         try {
             ringtone.play()
-            vibrator?.vibrateReminder(durationMillis)
+            if (reminder.vibrate) {
+                context.startReminderVibration(durationMillis)
+            }
             delay(durationMillis)
         } finally {
             ringtone.stop()
-            vibrator?.cancel()
+            context.stopReminderVibration()
         }
     }
 
@@ -131,23 +132,14 @@ class AlarmReceiver : BroadcastReceiver() {
             ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
     }
 
-    private fun Context.reminderVibrator(): Vibrator? {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            getSystemService(VibratorManager::class.java).defaultVibrator
-        } else {
-            @Suppress("DEPRECATION")
-            getSystemService(Vibrator::class.java)
-        }
+    private fun Context.startReminderVibration(durationMillis: Long) {
+        val manager = getSystemService(VibratorManager::class.java)
+        if (!manager.defaultVibrator.hasVibrator()) return
+        val effect = VibrationEffect.createOneShot(durationMillis, VibrationEffect.DEFAULT_AMPLITUDE)
+        manager.vibrate(CombinedVibration.createParallel(effect))
     }
 
-    private fun Vibrator.vibrateReminder(durationMillis: Long) {
-        if (!hasVibrator()) return
-        val pattern = longArrayOf(0L, 400L, 200L)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            vibrate(VibrationEffect.createWaveform(pattern, 1))
-        } else {
-            @Suppress("DEPRECATION")
-            vibrate(pattern, 1)
-        }
+    private fun Context.stopReminderVibration() {
+        getSystemService(VibratorManager::class.java).cancel()
     }
 }
