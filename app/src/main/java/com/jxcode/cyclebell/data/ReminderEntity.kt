@@ -28,6 +28,7 @@ data class ReminderEntity(
     val ringtoneUri: String?,
     val completedCount: Int,
     val nextTriggerAtMillis: Long?,
+    val scheduleAnchorAtMillis: Long?,
     val createdAtMillis: Long,
     val updatedAtMillis: Long
 )

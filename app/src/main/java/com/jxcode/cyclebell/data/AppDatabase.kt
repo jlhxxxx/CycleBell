@@ -10,7 +10,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [ReminderEntity::class],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 @TypeConverters(ReminderTypeConverters::class)
@@ -30,6 +30,7 @@ abstract class AppDatabase : RoomDatabase() {
                 )
                     .addMigrations(MIGRATION_1_2)
                     .addMigrations(MIGRATION_2_3)
+                    .addMigrations(MIGRATION_4_5)
                     .fallbackToDestructiveMigration(true)
                     .build()
                     .also { instance = it }
@@ -46,6 +47,19 @@ abstract class AppDatabase : RoomDatabase() {
         private val MIGRATION_2_3 = object : Migration(2, 3) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE reminders ADD COLUMN playDurationSeconds INTEGER NOT NULL DEFAULT 5")
+            }
+        }
+
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE reminders ADD COLUMN scheduleAnchorAtMillis INTEGER")
+                db.execSQL(
+                    """
+                    UPDATE reminders
+                    SET scheduleAnchorAtMillis = nextTriggerAtMillis
+                    WHERE scheduleAnchorAtMillis IS NULL
+                    """
+                )
             }
         }
     }

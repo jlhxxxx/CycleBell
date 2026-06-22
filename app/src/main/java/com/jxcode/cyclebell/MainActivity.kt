@@ -24,7 +24,9 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -53,13 +55,14 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.jxcode.cyclebell.alarm.AlarmScheduler
+import com.jxcode.cyclebell.alarm.ReminderRecovery
 import com.jxcode.cyclebell.alarm.ReminderSchedule
 import com.jxcode.cyclebell.alarm.ReminderSchedule.intervalSecondsTotal
 import com.jxcode.cyclebell.data.AppDatabase
 import com.jxcode.cyclebell.data.ReminderDao
 import com.jxcode.cyclebell.data.ReminderEntity
 import com.jxcode.cyclebell.data.RepeatEndType
-import com.jxcode.cyclebell.ui.theme.MyClockTheme
+import com.jxcode.cyclebell.ui.theme.CycleBellTheme
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.LocalTime
@@ -75,7 +78,7 @@ class MainActivity : ComponentActivity() {
 
         enableEdgeToEdge()
         setContent {
-            MyClockTheme {
+            CycleBellTheme {
                 CycleBellApp(reminderDao = dao, alarmScheduler = scheduler)
             }
         }
@@ -89,6 +92,8 @@ fun CycleBellApp(reminderDao: ReminderDao, alarmScheduler: AlarmScheduler) {
     var screen by remember { mutableStateOf(Screen.LIST) }
     var editingReminder by remember { mutableStateOf<ReminderEntity?>(null) }
     var reminders by remember { mutableStateOf(emptyList<ReminderEntity>()) }
+    var pendingScrollReminderId by remember { mutableStateOf<Long?>(null) }
+    val homeListState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
@@ -103,10 +108,16 @@ fun CycleBellApp(reminderDao: ReminderDao, alarmScheduler: AlarmScheduler) {
     LaunchedEffect(reminderDao) {
         reminderDao.observeReminders().collect { reminders = it }
     }
+    LaunchedEffect(Unit) {
+        ReminderRecovery.recover(reminderDao, alarmScheduler)
+    }
 
     when (screen) {
         Screen.LIST -> HomeScreen(
             reminders = reminders,
+            listState = homeListState,
+            scrollToReminderId = pendingScrollReminderId,
+            onScrolledToReminder = { pendingScrollReminderId = null },
             onCreate = { screen = Screen.CREATE },
             onEdit = {
                 editingReminder = it
@@ -115,15 +126,12 @@ fun CycleBellApp(reminderDao: ReminderDao, alarmScheduler: AlarmScheduler) {
             onToggle = { reminder, enabled ->
                 scope.launch {
                     if (enabled) {
-                        val restarted = reminder.copy(
-                            enabled = true,
-                            completedCount = 0,
-                            nextTriggerAtMillis = ReminderSchedule.firstTrigger(reminder)
-                        )
+                        val restarted = ReminderSchedule.withFreshSchedule(reminder.copy(enabled = true))
                         reminderDao.restartReminder(
                             id = reminder.id,
                             enabled = true,
                             nextTriggerAtMillis = restarted.nextTriggerAtMillis,
+                            scheduleAnchorAtMillis = restarted.scheduleAnchorAtMillis,
                             updatedAtMillis = System.currentTimeMillis()
                         )
                         alarmScheduler.schedule(restarted)
@@ -148,6 +156,7 @@ fun CycleBellApp(reminderDao: ReminderDao, alarmScheduler: AlarmScheduler) {
                 scope.launch {
                     val id = reminderDao.insertReminder(draft)
                     alarmScheduler.schedule(draft.copy(id = id))
+                    pendingScrollReminderId = id
                     screen = Screen.LIST
                 }
             }
@@ -162,6 +171,7 @@ fun CycleBellApp(reminderDao: ReminderDao, alarmScheduler: AlarmScheduler) {
                     reminderDao.updateReminder(draft)
                     alarmScheduler.schedule(draft)
                     editingReminder = null
+                    pendingScrollReminderId = draft.id
                     screen = Screen.LIST
                 }
             }
@@ -173,6 +183,9 @@ fun CycleBellApp(reminderDao: ReminderDao, alarmScheduler: AlarmScheduler) {
 @Composable
 private fun HomeScreen(
     reminders: List<ReminderEntity>,
+    listState: LazyListState,
+    scrollToReminderId: Long?,
+    onScrolledToReminder: () -> Unit,
     onCreate: () -> Unit,
     onEdit: (ReminderEntity) -> Unit,
     onToggle: (ReminderEntity, Boolean) -> Unit,
@@ -181,8 +194,18 @@ private fun HomeScreen(
     val nextReminder = reminders.filter { it.enabled && it.nextTriggerAtMillis != null }
         .minByOrNull { it.nextTriggerAtMillis ?: Long.MAX_VALUE }
 
+    LaunchedEffect(reminders, scrollToReminderId) {
+        val reminderId = scrollToReminderId ?: return@LaunchedEffect
+        val reminderIndex = reminders.indexOfFirst { it.id == reminderId }
+        if (reminderIndex >= 0) {
+            listState.animateScrollToItem(reminderIndex + 2)
+            onScrolledToReminder()
+        }
+    }
+
     Scaffold(topBar = { TopAppBar(title = { Text("Cycle Bell") }) }) { innerPadding ->
         LazyColumn(
+            state = listState,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding),
@@ -529,10 +552,11 @@ private fun buildReminder(
         ringtoneUri = ringtoneUri,
         completedCount = 0,
         nextTriggerAtMillis = null,
+        scheduleAnchorAtMillis = null,
         createdAtMillis = existingReminder?.createdAtMillis ?: now,
         updatedAtMillis = now
     )
-    return reminder.copy(nextTriggerAtMillis = ReminderSchedule.firstTrigger(reminder, now))
+    return ReminderSchedule.withFreshSchedule(reminder, now)
 }
 
 private fun String.toBoundedInt(min: Int, max: Int, blankAsZero: Boolean = false): Int? {
@@ -612,7 +636,7 @@ private fun ringtoneTitle(context: Context, uri: Uri): String {
 @Preview(showBackground = true)
 @Composable
 private fun HomePreview() {
-    MyClockTheme {
-        HomeScreen(emptyList(), {}, {}, { _, _ -> }, {})
+    CycleBellTheme {
+        HomeScreen(emptyList(), rememberLazyListState(), null, {}, {}, {}, { _, _ -> }, {})
     }
 }

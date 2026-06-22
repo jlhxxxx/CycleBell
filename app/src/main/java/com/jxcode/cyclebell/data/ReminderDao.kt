@@ -16,6 +16,9 @@ interface ReminderDao {
     @Query("SELECT * FROM reminders WHERE id = :id LIMIT 1")
     suspend fun getReminder(id: Long): ReminderEntity?
 
+    @Query("SELECT * FROM reminders WHERE enabled = 1")
+    suspend fun getEnabledReminders(): List<ReminderEntity>
+
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertReminder(reminder: ReminderEntity): Long
 
@@ -34,11 +37,36 @@ interface ReminderDao {
         SET enabled = :enabled,
             completedCount = 0,
             nextTriggerAtMillis = :nextTriggerAtMillis,
+            scheduleAnchorAtMillis = :scheduleAnchorAtMillis,
             updatedAtMillis = :updatedAtMillis
         WHERE id = :id
         """
     )
-    suspend fun restartReminder(id: Long, enabled: Boolean, nextTriggerAtMillis: Long?, updatedAtMillis: Long)
+    suspend fun restartReminder(
+        id: Long,
+        enabled: Boolean,
+        nextTriggerAtMillis: Long?,
+        scheduleAnchorAtMillis: Long?,
+        updatedAtMillis: Long
+    )
+
+    @Query(
+        """
+        UPDATE reminders
+        SET enabled = :enabled,
+            nextTriggerAtMillis = :nextTriggerAtMillis,
+            scheduleAnchorAtMillis = :scheduleAnchorAtMillis,
+            updatedAtMillis = :updatedAtMillis
+        WHERE id = :id
+        """
+    )
+    suspend fun updateScheduleState(
+        id: Long,
+        enabled: Boolean,
+        nextTriggerAtMillis: Long?,
+        scheduleAnchorAtMillis: Long?,
+        updatedAtMillis: Long
+    )
 
     @Query(
         """

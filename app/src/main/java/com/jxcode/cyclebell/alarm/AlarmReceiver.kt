@@ -46,7 +46,6 @@ class AlarmReceiver : BroadcastReceiver() {
         if (!reminder.enabled) return
 
         showReminderNotification(context, reminder)
-        playReminderAlert(context, reminder)
 
         val completedCount = reminder.completedCount + 1
         val previousTriggerAtMillis = reminder.nextTriggerAtMillis ?: System.currentTimeMillis()
@@ -72,6 +71,8 @@ class AlarmReceiver : BroadcastReceiver() {
                 )
             )
         }
+
+        playReminderAlert(context, reminder)
     }
 
     private fun showReminderNotification(context: Context, reminder: ReminderEntity) {
